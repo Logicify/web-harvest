@@ -36,9 +36,8 @@
  */
 package org.webharvest.runtime.processors;
 
-import static org.webharvest.WHConstants.XMLNS_CORE;
-import static org.webharvest.WHConstants.XMLNS_CORE_10;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.webharvest.annotation.Definition;
 import org.webharvest.definition.HttpHeaderDef;
 import org.webharvest.exception.HttpException;
@@ -49,29 +48,51 @@ import org.webharvest.runtime.templaters.BaseTemplater;
 import org.webharvest.runtime.variables.EmptyVariable;
 import org.webharvest.runtime.variables.Variable;
 
+import static org.webharvest.WHConstants.XMLNS_CORE;
+import static org.webharvest.WHConstants.XMLNS_CORE_10;
+
 /**
  * Variable definition http header processor.
  */
 // TODO Add unit test
 // TODO Add javadoc
 @Autoscanned
-@TargetNamespace({ XMLNS_CORE, XMLNS_CORE_10 })
-@Definition(value = "http-header", validAttributes = { "id", "name" },
+@TargetNamespace({XMLNS_CORE, XMLNS_CORE_10})
+@Definition(value = "http-header", validAttributes = {"id", "name"},
         requiredAttributes = "name", definitionClass = HttpHeaderDef.class)
-public class HttpHeaderProcessor extends AbstractProcessor<HttpHeaderDef> {
+public class HttpHeaderProcessor extends AbstractProcessor<HttpHeaderDef>
+{
+
+    Logger LOGGER = LoggerFactory.getLogger(HttpHeaderProcessor.class);
 
     public Variable execute(DynamicScopeContext context)
-            throws InterruptedException {
+            throws InterruptedException
+    {
         String name = BaseTemplater.evaluateToString(elementDef.getName(),
                 null, context);
 
         final HttpProcessor httpProcessor =
-            (HttpProcessor) getParentProcessor();
-        if (httpProcessor != null) {
-            httpProcessor.addHttpHeader(name,
-                            getBodyTextContent(elementDef, context).toString());
+                (HttpProcessor) getParentProcessor();
+        if (httpProcessor != null)
+        {
+            String headerValue = getBodyTextContent(elementDef, context).toString();
+            if (headerValue.contains("\n") || headerValue.contains("\r"))
+            {
+
+
+                LOGGER.warn("Line {}:{}  Newline character found in the header {} value. Value is: {}. Replacing newlines with space.",
+                        new Object[]{
+                                elementDef.getLineNumber(),
+                                elementDef.getColumnNumber(),
+                                name,
+                                headerValue
+                        });
+                headerValue = headerValue.replaceAll("\\r|\\n", " ");
+            }
+            httpProcessor.addHttpHeader(name, headerValue);
             this.setProperty("Name", name);
-        } else {
+        } else
+        {
             throw new HttpException(
                     "Usage of http-header processor is not allowed outside of http processor!");
         }
