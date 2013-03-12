@@ -60,7 +60,7 @@ public class HandlerHolderIntegrationTest extends UnitilsTestNG {
                 new ContextInitCallback() {
 
                     @Override
-                    public void onSuccess(final DynamicScopeContext context) {
+                    public void onContextInitSuccess(final DynamicScopeContext context) {
                         // Do nothing
                     }
 

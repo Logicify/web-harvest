@@ -172,7 +172,7 @@ public class CommandLine {
 
             harvester.execute(new Harvester.ContextInitCallback() {
                 @Override
-                public void onSuccess(DynamicScopeContext context) {
+                public void onContextInitSuccess(DynamicScopeContext context) {
                     // adds initial variables to the scraper's content, if any
                     final Map<String, String> vars =
                         getArgValue(getVariables(params), true);

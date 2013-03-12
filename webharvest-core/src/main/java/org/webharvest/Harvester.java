@@ -83,7 +83,7 @@ public interface Harvester {
          * @param context
          *            new scrpaer's context object.
          */
-        void onSuccess(DynamicScopeContext context);
+        void onContextInitSuccess(DynamicScopeContext context);
 
     }
 }

@@ -45,7 +45,7 @@ public class ScrapingHarvesterTest extends UnitilsTestNG {
     public void testExecute() throws IOException {
         expect(mockScraperProvider.get()).andReturn(mockScraper);
         expect(mockContextFactory.create(mockConfig)).andReturn(mockContext);
-        mockInitCallback.onSuccess(mockContext);
+        mockInitCallback.onContextInitSuccess(mockContext);
         expectLastCall();
         mockScraper.execute(mockContext);
         expectLastCall();

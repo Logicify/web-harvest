@@ -36,46 +36,9 @@
 */
 package org.webharvest.gui;
 
-import java.awt.BorderLayout;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
-import java.io.File;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.net.URL;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import javax.swing.JComponent;
-import javax.swing.JMenuItem;
-import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
-import javax.swing.JTree;
-import javax.swing.SwingUtilities;
-import javax.swing.ToolTipManager;
-import javax.swing.border.EmptyBorder;
-import javax.swing.event.CaretEvent;
-import javax.swing.event.CaretListener;
-import javax.swing.event.TreeSelectionEvent;
-import javax.swing.event.TreeSelectionListener;
-import javax.swing.text.BadLocationException;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.TreePath;
-import javax.swing.tree.TreeSelectionModel;
-
+import com.google.common.eventbus.Subscribe;
+import com.google.inject.Guice;
+import com.google.inject.util.Modules;
 import org.apache.log4j.Logger;
 import org.webharvest.Harvest;
 import org.webharvest.HarvestLoadCallback;
@@ -84,16 +47,7 @@ import org.webharvest.WHConstants;
 import org.webharvest.definition.ConfigSource;
 import org.webharvest.definition.ConstantDef;
 import org.webharvest.definition.IElementDef;
-import org.webharvest.events.EventHandler;
-import org.webharvest.events.ProcessorStartEvent;
-import org.webharvest.events.ProcessorStopEvent;
-import org.webharvest.events.ScraperExecutionContinuedEvent;
-import org.webharvest.events.ScraperExecutionEndEvent;
-import org.webharvest.events.ScraperExecutionErrorEvent;
-import org.webharvest.events.ScraperExecutionExitEvent;
-import org.webharvest.events.ScraperExecutionPausedEvent;
-import org.webharvest.events.ScraperExecutionStartEvent;
-import org.webharvest.events.ScraperExecutionStoppedEvent;
+import org.webharvest.events.*;
 import org.webharvest.gui.component.MenuElements;
 import org.webharvest.gui.component.ProportionalSplitPane;
 import org.webharvest.gui.component.WHPopupMenu;
@@ -108,9 +62,28 @@ import org.webharvest.runtime.processors.AbstractProcessor;
 import org.webharvest.runtime.processors.Processor;
 import org.webharvest.runtime.web.HttpClientManager.ProxySettings;
 
-import com.google.common.eventbus.Subscribe;
-import com.google.inject.Guice;
-import com.google.inject.util.Modules;
+import javax.swing.*;
+import javax.swing.border.EmptyBorder;
+import javax.swing.event.CaretEvent;
+import javax.swing.event.CaretListener;
+import javax.swing.event.TreeSelectionEvent;
+import javax.swing.event.TreeSelectionListener;
+import javax.swing.text.BadLocationException;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
+import javax.swing.tree.TreeSelectionModel;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.File;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.net.URL;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Single panel containing XML configuration.
@@ -124,7 +97,6 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
     private static final String VIEW_RESULT_AS_HTML = "View result as HTML";
     private static final String VIEW_RESULT_AS_IMAGE = "View result as image";
     private static final String VIEW_RESULT_AS_LIST = "View result as list";
-
     // basic skeleton for new opened configuration
     private static final String BASIC_CONFIG_SKELETON = "" +
             "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n" +
@@ -133,7 +105,6 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
             "\t\txmlns:p=\"" + WHConstants.XMLNS_PARAM + "\">\n" +
             "\t\n" +
             "</config>";
-
     private static Logger LOG = Logger.getLogger(ConfigPanel.class);
 
     static {
@@ -189,12 +160,9 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
     }
 
     private ConfigDocument configDocument;
-
     // initial configuration parameters
     private Map initParams = null;
-
     private Ide ide;
-
     private DefaultMutableTreeNode topNode;
     private DefaultTreeModel treeModel;
     private TreeNodeInfo selectedNodeInfo;
@@ -202,38 +170,30 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
     // Indexed by source line number for particular element def
     private Map<Integer, TreeNodeInfo> nodeInfos = new Hashtable<Integer, TreeNodeInfo>();
     private NodeRenderer nodeRenderer = new NodeRenderer();
-
     private JSplitPane bottomSplitter;
     private JSplitPane leftSplitter;
     private JSplitPane leftView;
     private JScrollPane bottomView;
     private int leftDividerLocation = 0;
     private int bottomDividerLocation = 0;
-
     private XmlTextPane xmlPane;
     private JTree tree;
     private PropertiesGrid propertiesGrid;
-
     // tree popup menu items
     private JMenuItem textViewMenuItem;
     private JMenuItem xmlViewMenuItem;
     private JMenuItem htmlViewMenuItem;
     private JMenuItem imageViewMenuItem;
     private JMenuItem listViewMenuItem;
-
     // Log area popup menu items
     private JMenuItem logSelectAllMenuItem;
     private JMenuItem logClearAllMenuItem;
-
     private Harvest harvest;
-
     private Harvester harvester;
-
     //TODO: ConfigPanel should not hold reference to DynamicScopeContext, but
     //firstly ViewerFrame must be well designed in order to do not required
     //Scraper's context.
     private DynamicScopeContext scraperContext;
-
     //TODO: ConfigPanel should not hold Scraper's state, but firstly components
     //of IDE must be well designed and react correctly on events.
     private ScraperState scraperState = ScraperState.READY;
@@ -406,9 +366,9 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
     private Harvest createHarvest() {
         // FIXME rbala although temporary solution it is duplicated (CommandLine)
         this.harvest = Guice.createInjector(Modules.override(
-                        new ScraperModule(ide.getSettings().getWorkingPath())).
-                            with(new GuiModule()),
-                    new HttpModule(loadProxySettings()))
+                new ScraperModule(ide.getSettings().getWorkingPath())).
+                with(new GuiModule()),
+                new HttpModule(loadProxySettings()))
                 .getInstance(Harvest.class);
         // TODO rbala Possibly bind with Guice when finally created Swing module
         harvest.addEventHandler(new EventHandler<ScraperExecutionStartEvent>() {
@@ -694,24 +654,24 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
         this.harvester = createHarvest().getHarvester(config,
                 new HarvestLoadCallback() {
 
-            @Override
-            public void onSuccess(final List<IElementDef> elements) {
-                IElementDef[] defs = new IElementDef[elements.size()];
-                Iterator<IElementDef> it = elements.iterator();
-                int index = 0;
-                while (it.hasNext()) {
-                    defs[index++] = it.next();
-                }
+                    @Override
+                    public void onSuccess(final List<IElementDef> elements) {
+                        IElementDef[] defs = new IElementDef[elements.size()];
+                        Iterator<IElementDef> it = elements.iterator();
+                        int index = 0;
+                        while (it.hasNext()) {
+                            defs[index++] = it.next();
+                        }
 
-                ConfigPanel.this.topNode.removeAllChildren();
-                ConfigPanel.this.nodeInfos.clear();
-                createNodes(ConfigPanel.this.topNode, defs);
-                ConfigPanel.this.treeModel.reload();
-                expandTree();
+                        ConfigPanel.this.topNode.removeAllChildren();
+                        ConfigPanel.this.nodeInfos.clear();
+                        createNodes(ConfigPanel.this.topNode, defs);
+                        ConfigPanel.this.treeModel.reload();
+                        expandTree();
 
-            }
+                    }
 
-        });
+                });
     }
 
     /**
@@ -737,7 +697,7 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
                 //
                 if (ide.getSettings().isDynamicConfigLocate()) {
                     setExecutingNode(nodeInfo);
-                };
+                }
                 int lineNumber = locateInSource(nodeInfo.getNode(), true) - 1;
                 if (xmlPane.getBreakpoints().isThereBreakpoint(lineNumber)) {
 
@@ -806,8 +766,7 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
     /**
      * Helper method invoking when execution has finished with error.
      *
-     * @param message
-     *            cause of execution's exit
+     * @param message cause of execution's exit
      */
     private void onExecutionExit(final String message) {
         if (message != null && !"".equals(message.trim())) {
@@ -844,7 +803,6 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
         // releases scraper in order help garbage collector
 //        releaseScraper();
     }
-
 
     private void onProcessorExecutionFinished(Processor processor, Map properties) {
         final IElementDef elementDef = processor.getElementDef();
@@ -924,15 +882,15 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
                 final Harvester.ContextInitCallback callback =
                         new Harvester.ContextInitCallback() {
 
-                    @Override
-                    public void onSuccess(final DynamicScopeContext context) {
-                        context.setLocalVar(initParams);
-                        //FIXME mczapiewski This is a dirty way to get reference
-                        //to the context. It is required to instantiate
-                        //ViewerFrame until it is not well-designed.
-                        ConfigPanel.this.scraperContext = context;
-                    }
-                };
+                            @Override
+                            public void onContextInitSuccess(final DynamicScopeContext context) {
+                                context.setLocalVar(initParams);
+                                //FIXME mczapiewski This is a dirty way to get reference
+                                //to the context. It is required to instantiate
+                                //ViewerFrame until it is not well-designed.
+                                ConfigPanel.this.scraperContext = context;
+                            }
+                        };
 
                 this.logTextArea.setText(null);
 
@@ -955,16 +913,16 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
         int proxyPort = settings.getProxyPort();
 
         final ProxySettings.Builder proxySettingsBuilder =
-            new ProxySettings.Builder(proxyServer);
+                new ProxySettings.Builder(proxyServer);
         if (proxyPort > 0) {
             proxySettingsBuilder.setProxyPort(proxyPort);
         }
 
         if (settings.isProxyAuthEnabled()) {
             final String ntlmHost = settings.isNtlmAuthEnabled()
-                ? settings.getNtlmHost() : null;
+                    ? settings.getNtlmHost() : null;
             final String ntlmDomain = settings.isNtlmAuthEnabled()
-                ? settings.getNtlmDomain() : null;
+                    ? settings.getNtlmDomain() : null;
 
             proxySettingsBuilder.setProxyCredentialsUsername(
                     settings.getProxyUserename());
@@ -1010,7 +968,7 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
             Object userObject = treeNode.getUserObject();
             if (userObject instanceof TreeNodeInfo) {
                 TreeNodeInfo treeNodeInfo = (TreeNodeInfo) userObject;
-                IElementDef elementDef =  treeNodeInfo.getElementDef();
+                IElementDef elementDef = treeNodeInfo.getElementDef();
                 int lineNumber = elementDef.getLineNumber();
                 int columnNumber = elementDef.getColumnNumber();
 
@@ -1045,7 +1003,8 @@ public class ConfigPanel extends JPanel implements TreeSelectionListener, CaretL
                     //
                     if (ide.getSettings().isDynamicConfigLocate()) {
                         this.xmlPane.setCaretPosition(startIndex >= 0 ? startIndex : 0);
-                    };
+                    }
+                    ;
                 } catch (BadLocationException e) {
                     e.printStackTrace();
                     //todo: swallow exception?

@@ -111,7 +111,7 @@ public class ScrapingHarvester implements Harvester {
 
         final DynamicScopeContext context =
                 contextFactory.create(config);
-        callback.onSuccess(context);
+        callback.onContextInitSuccess(context);
 
         scraper.execute(context);
 

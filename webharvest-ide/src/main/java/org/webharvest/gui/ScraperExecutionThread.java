@@ -36,9 +36,9 @@
  */
 package org.webharvest.gui;
 
-import javax.swing.JTextArea;
-
 import org.webharvest.Harvester;
+
+import javax.swing.*;
 
 /**
  * Thread which executes scraper configuration
@@ -49,16 +49,25 @@ public class ScraperExecutionThread extends Thread {
     private JTextArea logTextArea;
     private Harvester.ContextInitCallback callback;
 
-    public ScraperExecutionThread(Harvester harvester,
-            Harvester.ContextInitCallback callback, JTextArea logTextArea) {
+    public ScraperExecutionThread(Harvester harvester, Harvester.ContextInitCallback callback, JTextArea logTextArea) {
         this.harvester = harvester;
         this.logTextArea = logTextArea;
         this.callback = callback;
     }
 
     public void run() {
-        TextAreaAppender.setCurrentLogArea(logTextArea);
-        harvester.execute(callback);
+        // TODO a.cherednichenko - replace with a normal event-driven stuff. This kind of events is
+        // being listened for in ConfigPanel, but the event itself is internal to scraper, and posted
+        // to its event bus. Error usually caught here is something happening BEFORE the scrapper gets
+        // invoked, for instance wrong variable name (see https://github.com/lexaux/web-harvest/issues/3
+        // for an example)
+        try {
+            TextAreaAppender.setCurrentLogArea(logTextArea);
+            harvester.execute(callback);
+        } catch (Exception e) {
+            GuiUtils.showErrorMessage("Could not run configuration, did not even come to scraper execution. Error is:\n"
+                    + e.getMessage());
+            throw new IllegalStateException(e);
+        }
     }
-
 }
