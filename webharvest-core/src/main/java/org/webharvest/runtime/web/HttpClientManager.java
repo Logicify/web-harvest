@@ -36,7 +36,25 @@
 */
 package org.webharvest.runtime.web;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import com.google.inject.Inject;
+import org.apache.commons.httpclient.*;
+import org.apache.commons.httpclient.auth.AuthScope;
+import org.apache.commons.httpclient.contrib.ssl.EasySSLProtocolSocketFactory;
+import org.apache.commons.httpclient.cookie.CookiePolicy;
+import org.apache.commons.httpclient.methods.GetMethod;
+import org.apache.commons.httpclient.methods.PostMethod;
+import org.apache.commons.httpclient.methods.StringRequestEntity;
+import org.apache.commons.httpclient.methods.multipart.*;
+import org.apache.commons.httpclient.params.HttpClientParams;
+import org.apache.commons.httpclient.params.HttpMethodParams;
+import org.apache.commons.httpclient.protocol.Protocol;
+import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
+import org.apache.commons.lang.BooleanUtils;
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.webharvest.runtime.variables.Variable;
+import org.webharvest.utils.CommonUtil;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -49,48 +67,12 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import org.apache.commons.httpclient.Cookie;
-import org.apache.commons.httpclient.Credentials;
-import org.apache.commons.httpclient.Header;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpMethodBase;
-import org.apache.commons.httpclient.HttpState;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.NTCredentials;
-import org.apache.commons.httpclient.NameValuePair;
-import org.apache.commons.httpclient.ProxyHost;
-import org.apache.commons.httpclient.UsernamePasswordCredentials;
-import org.apache.commons.httpclient.auth.AuthScope;
-import org.apache.commons.httpclient.contrib.ssl.EasySSLProtocolSocketFactory;
-import org.apache.commons.httpclient.cookie.CookiePolicy;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.httpclient.methods.StringRequestEntity;
-import org.apache.commons.httpclient.methods.multipart.ByteArrayPartSource;
-import org.apache.commons.httpclient.methods.multipart.FilePart;
-import org.apache.commons.httpclient.methods.multipart.MultipartRequestEntity;
-import org.apache.commons.httpclient.methods.multipart.Part;
-import org.apache.commons.httpclient.methods.multipart.StringPart;
-import org.apache.commons.httpclient.params.HttpClientParams;
-import org.apache.commons.httpclient.params.HttpMethodParams;
-import org.apache.commons.httpclient.protocol.Protocol;
-import org.apache.commons.httpclient.protocol.ProtocolSocketFactory;
-import org.apache.commons.lang.BooleanUtils;
-import org.apache.commons.lang.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.webharvest.runtime.variables.Variable;
-import org.webharvest.utils.CommonUtil;
-
-import com.google.inject.Inject;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 /**
  * HTTP client functionality.
  */
 public class HttpClientManager {
-
-    private static final Logger LOG =
-        LoggerFactory.getLogger(HttpClientManager.class);
 
     public static final String DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.0.1) Gecko/20060111 Firefox/1.5.0.1";
 
@@ -99,6 +81,8 @@ public class HttpClientManager {
         Protocol.registerProtocol("https", new Protocol("https", (ProtocolSocketFactory) new EasySSLProtocolSocketFactory(), 443));
     }
 
+    private static final Logger LOG =
+            LoggerFactory.getLogger(HttpClientManager.class);
     private final HttpClient client;
     private final HttpInfo httpInfo;
 
@@ -144,11 +128,14 @@ public class HttpClientManager {
             String password,
             Variable bodyContent, Map<String, HttpParamInfo> params,
             Map headers, int retryAttempts, long retryDelay, double retryDelayFactor) throws InterruptedException, UnsupportedEncodingException {
+        LOG.trace("Entering execute() method for for method {} and url {}", methodType, url);
+
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             url = "http://" + url;
         }
 
         url = CommonUtil.encodeUrl(url, charset);
+        LOG.trace("Encoded URL is {}", url);
 
         HttpState clientState = client.getState();
 
@@ -194,6 +181,7 @@ public class HttpClientManager {
 
         HttpResponseWrapper responseWrapper = null;
         try {
+            LOG.trace("Calling doExecute...");
             responseWrapper = doExecute(url, method, followRedirects, retryAttempts, retryDelay, retryDelayFactor);
             return responseWrapper;
         } finally {
@@ -268,6 +256,7 @@ public class HttpClientManager {
     }
 
     private HttpMethodBase executeFollowingRedirects(HttpMethodBase method, String url, Boolean followRedirects) throws IOException {
+        LOG.trace("About to call actual HTTPClient for method {} and url {}", method.getName(), url);
         final int statusCode = client.executeMethod(method);
         // POST method is not redirected automatically, so it's on our responsibility then.
         if (BooleanUtils.isTrue(followRedirects)
@@ -302,6 +291,7 @@ public class HttpClientManager {
     private HttpMethodBase createPostMethod(String url, Map<String, HttpParamInfo> params, String contentType, String charset, Variable bodyContent)
             throws UnsupportedEncodingException {
         PostMethod method = new PostMethod(url);
+        LOG.trace("Creating method POST for url '{}'", url);
 
         int filenameIndex = 1;
         if (params != null) {
@@ -355,11 +345,12 @@ public class HttpClientManager {
     // - we need to refactor entire HttpClientManager class (splitting it into
     // multiple classes/interfaces)
     GetMethod createGetMethod(String url, Map<String, HttpParamInfo> params,
-            String charset, Boolean followRedirects) {
+                              String charset, Boolean followRedirects) {
+        LOG.trace("Creating GET method for url '{}'", url);
         if (params != null) {
             final StringBuilder urlParamsBuilder = new StringBuilder();
             final Iterator<Entry<String, HttpParamInfo>> iterator =
-                params.entrySet().iterator();
+                    params.entrySet().iterator();
 
             while (iterator.hasNext()) {
                 final Entry<String, HttpParamInfo> entry = iterator.next();
@@ -367,9 +358,9 @@ public class HttpClientManager {
 
                 try {
                     urlParamsBuilder.append(entry.getKey())
-                        .append("=")
-                        .append(URLEncoder.encode(CommonUtil.nvl(
-                                httpParamInfo.getValue(), ""), charset));
+                            .append("=")
+                            .append(URLEncoder.encode(CommonUtil.nvl(
+                                    httpParamInfo.getValue(), ""), charset));
                 } catch (UnsupportedEncodingException e) {
                     throw new org.webharvest.exception.HttpException("Charset "
                             + charset + " is not supported!", e);
@@ -413,8 +404,7 @@ public class HttpClientManager {
     public static final class ProxySettings {
 
         public static final ProxySettings NO_PROXY_SET =
-            new ProxySettings(null);
-
+                new ProxySettings(null);
         private final ProxyHost proxyHost;
         private Credentials proxyCredentials;
 
@@ -438,7 +428,6 @@ public class HttpClientManager {
         public static final class Builder {
             private final String proxyHost;
             private int proxyPort = -1;
-
             // proxy credentials
             private String proxyUsername;
             private String proxyPassword;
@@ -493,8 +482,8 @@ public class HttpClientManager {
             private Credentials createCredentials() {
                 return (proxyNTHost == null || proxyNTDomain == null
                         || "".equals(proxyNTHost.trim()) || "".equals(proxyNTDomain.trim())) ?
-                            new UsernamePasswordCredentials(proxyUsername, proxyPassword) :
-                            new NTCredentials(proxyUsername, proxyPassword, proxyNTHost, proxyNTDomain);
+                        new UsernamePasswordCredentials(proxyUsername, proxyPassword) :
+                        new NTCredentials(proxyUsername, proxyPassword, proxyNTHost, proxyNTDomain);
             }
         }
     }
